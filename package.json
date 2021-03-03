@@ -2,7 +2,7 @@
   "name": "react-water-mark",
   "version": "0.0.0",
   "scripts": {
-    "dev": "vite",
+    "dev": "PORT=4001 vite",
     "build": "tsc && vite build",
     "serve": "vite preview"
   },

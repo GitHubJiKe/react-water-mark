@@ -1,101 +1,273 @@
-import React, { CSSProperties, useEffect } from "react";
+import React, { useEffect, useRef, useCallback } from "react";
 
-// Canvas 文档
-// https://developer.mozilla.org/zh-CN/docs/Web/API/CanvasRenderingContext2D
-
-interface IWaterMarkTextStyle {
-  color?: string; // 字体颜色
-  font?: string; // 字体样式
-  rotate?: number; // 偏移角度
-  textAlign?: "center" | "left" | "right" | "start" | "end"; // 文本的对齐方式
-  textBaseline?:
-    | "top"
-    | "hanging"
-    | "middle"
-    | "alphabetic"
-    | "ideographic"
-    | "bottom"; // 文本基线
-  direction?: "ltr" | "rtl" | "inherit"; // 当前文本方向 ltr:left to right,rtl: right to left,default : inherit
+interface IConfig {
+  fontStyle: string;
+  fontColor: string;
+  rotateAngle: number;
+  firstLinePositionX: number;
+  firstLinePositionY: number;
+  width: number;
+  height: number;
 }
+
+type BoxStyle = Partial<IWaterMarkBoxStyle>;
 
 interface IWaterMarkProps {
-  text: string;
-  textStyle?: IWaterMarkTextStyle;
-  width?: string;
-  height?: string;
-  children: React.ReactNode;
-  containerStyle?: React.CSSProperties | null;
+  mountTarget?: string; // 挂在的目标:element id
+  config?: Partial<IConfig>; // 配置信息
+  text: string; // 水印文本内容
+  boxStyle?: BoxStyle; // 水印的样式
+  className?: string;
 }
 
-function createCanvasContext(width: string, height: string) {
-  const canvas = document.createElement("canvas");
-
-  canvas.setAttribute("width", width);
-  canvas.setAttribute("height", height);
-
-  return { canvas, cxt: canvas.getContext("2d") };
+interface IWaterMarkBoxStyle {
+  width: string;
+  height: string;
+  "pointer-events": string;
+  opacity: number;
+  top: number | string;
+  left: number | string;
+  right: number | string;
+  bottom: number | string;
+  position: "absolute" | "fixed";
+  "z-index": number;
+  display: "block" | "inline" | "inline-block";
+  background?: string;
+  visibility: "hidden" | "visible";
 }
 
-function getWaterMarkContainer() {
-  let container = document.getElementById("water-mark-container");
-  if (!container) {
-    container = document.createElement("div");
-    container.id = "water-mark-container";
-  }
-  return container;
-}
+const defaultConfig: IConfig = {
+  fontStyle: "14px 黑体", // 水印字体设置
+  rotateAngle: -(20 * Math.PI) / 180, // 水印字体倾斜角度设置
+  fontColor: "rgba(44, 46, 59, 0.06)", // 水印字体颜色设置
+  firstLinePositionX: 0, // canvas第一行文字起始X坐标
+  firstLinePositionY: 0, // Y
+  width: 220, // 水印内容是以此宽高进行背景重复展示实现的
+  height: 100, // 水印内容是以此宽高进行背景重复展示实现的
+};
+
+const defaultBoxStyle: BoxStyle = {
+  width: "100%",
+  height: "100%",
+  "pointer-events": "none",
+  opacity: 1,
+  top: 0,
+  left: 0,
+  position: "fixed",
+  "z-index": 1000000,
+  display: "block",
+  visibility: "visible",
+};
+
+const WaterMarkClassName = "water-maker";
 
 export default function WaterMark({
-  width = "100%",
-  height = "100%",
-  textStyle = {
-    color: "rgba(184, 184, 184, 0.6)",
-    font: "20px Microsoft Yahei",
-    rotate: 30,
-    textAlign: "center",
-    textBaseline: "middle",
-    direction: "ltr",
-  },
+  mountTarget = "body",
+  config,
   text,
-  children,
-  containerStyle,
+  boxStyle,
+  className,
 }: IWaterMarkProps) {
-  useEffect(() => {
-    const textX = text.length * 12 + "px";
-    const textY = text.length * 7 + "px";
-    const { cxt, canvas } = createCanvasContext(textX, textY);
-    if (cxt) {
-      const { textAlign, textBaseline, font, color, rotate } = textStyle;
-      cxt.textAlign = textAlign!;
-      cxt.textBaseline = textBaseline!;
-      cxt.font = font!;
-      cxt.fillStyle = color!;
-      cxt.rotate((rotate! * Math.PI) / 180);
-      cxt.fillText(
-        text,
-        text.length * 6,
-        parseFloat((text.length / 3).toString())
-      );
+  const mountTargetRef = useRef<HTMLElement | null>(null);
+  const waterMarkBoxRef = useRef<HTMLElement | null>(null);
+  const bgUrlRef = useRef("");
+  const finalClassName = className
+    ? `${WaterMarkClassName} ${className}`
+    : WaterMarkClassName;
 
-      const base64URL = canvas.toDataURL();
+  const setBoxStyle = useCallback(() => {
+    const mergedBoxStyle: BoxStyle = {
+      ...defaultBoxStyle,
+      ...boxStyle,
+      background: `url(${bgUrlRef.current}) repeat`,
+    };
 
-      const container = getWaterMarkContainer();
-
-      container.style.width = width;
-      container.style.height = height;
-      container.style.backgroundImage = `url(${base64URL})`;
-      container.style.pointerEvents = "none";
-      container.style.backgroundRepeat = "repeat";
-      container.style.position = containerStyle?.position!;
-      // @ts-ignore
-      container.style.top = containerStyle?.top!;
-
-      // @ts-ignore
-      container.style.left = containerStyle?.left!;
-      container.style.zIndex = "1000";
-
-      document.getElementById("water-mark")?.appendChild(container);
+    if (mountTarget !== "body") {
+      mergedBoxStyle.position = "absolute";
     }
-  }, []);
-  return <div id="water-mark">{children}</div>;
+
+    Object.keys(mergedBoxStyle).forEach((key) => {
+      const priority = ["opacity", "display", "visibility"].includes(key)
+        ? "important"
+        : "";
+      waterMarkBoxRef.current!.style.setProperty(
+        key,
+        // @ts-ignore
+        mergedBoxStyle[key],
+        priority
+      );
+    });
+  }, [boxStyle, mountTarget]);
+
+  useEffect(() => {
+    const observers: MutationObserver[] = [];
+
+    function createWaterMarkBox() {
+      const waterMarkBox = document.createElement("div");
+
+      waterMarkBox.className = finalClassName;
+
+      return waterMarkBox;
+    }
+
+    function getMountTarget() {
+      if (mountTarget === "body") {
+        return document.body;
+      }
+
+      const mountTargetEle = document.getElementById(mountTarget);
+
+      setMountTargetPosition(mountTargetEle);
+
+      return mountTargetEle;
+    }
+
+    function setMountTargetPosition(target: HTMLElement | null) {
+      const ignorePositions = ["relative", "absolute"];
+
+      if (ignorePositions.includes(target!.style.position)) {
+        return;
+      }
+
+      target!.style.position = "relative";
+    }
+
+    function drawCanvas() {
+      const mergedConfig = { ...defaultConfig, ...config };
+      const canvas = document.createElement("canvas");
+
+      canvas.width = mergedConfig.width;
+      canvas.height = mergedConfig.height;
+
+      const ctx = canvas.getContext("2d");
+
+      if (ctx) {
+        // 绘制水印到canvas上
+        ctx.font = mergedConfig.fontStyle;
+        ctx.fillStyle = mergedConfig.fontColor;
+        ctx.translate(mergedConfig.width / 2, mergedConfig.height / 2);
+        ctx.rotate(mergedConfig.rotateAngle); // 水印偏转角度
+        ctx.fillText(
+          text,
+          mergedConfig.firstLinePositionX,
+          mergedConfig.firstLinePositionY
+        );
+      }
+
+      bgUrlRef.current = canvas.toDataURL();
+
+      setBoxStyle();
+
+      mountTargetRef.current?.appendChild(waterMarkBoxRef.current!);
+    }
+
+    function observeAttributesChange() {
+      if (window.MutationObserver) {
+        const config = {
+          attributes: true,
+          characterData: true,
+          attributeOldValue: true,
+          characterDataOldValue: true,
+        };
+
+        const attributesMutationObserver = new MutationObserver(
+          (mutationsList) => {
+            for (let index = 0; index < mutationsList.length; index++) {
+              const mutation = mutationsList[index];
+
+              if (mutation.type === "attributes") {
+                if (
+                  mutation.attributeName === "class" &&
+                  mutation.oldValue === finalClassName
+                ) {
+                  waterMarkBoxRef.current!.className = finalClassName;
+                }
+
+                if (
+                  mutation.attributeName === "style" &&
+                  // @ts-ignore
+                  mutation.target.className === finalClassName
+                ) {
+                  setBoxStyle();
+                }
+              }
+            }
+          }
+        );
+
+        attributesMutationObserver.observe(waterMarkBoxRef.current!, config);
+
+        observers.push(attributesMutationObserver);
+      }
+    }
+
+    function observeDOMChange() {
+      if (window.MutationObserver) {
+        const domMutationObserver = new MutationObserver((mutationsList) => {
+          mutationsList.forEach((mutation) => {
+            if (mutation.type === "childList") {
+              mutation.removedNodes.forEach((item) => {
+                if (item === waterMarkBoxRef.current) {
+                  mountTargetRef.current!.appendChild(waterMarkBoxRef.current);
+                }
+              });
+            }
+          });
+        });
+
+        domMutationObserver.observe(mountTargetRef.current!, {
+          childList: true,
+        });
+
+        observers.push(domMutationObserver);
+      }
+    }
+
+    waterMarkBoxRef.current = createWaterMarkBox();
+
+    mountTargetRef.current = getMountTarget();
+
+    drawCanvas();
+
+    observeAttributesChange();
+
+    observeDOMChange();
+
+    return () => {
+      observers.forEach((v) => v.disconnect());
+
+      if (mountTargetRef.current && waterMarkBoxRef.current) {
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        mountTargetRef.current.removeChild(waterMarkBoxRef.current);
+      }
+    };
+  }, [config, finalClassName, mountTarget, setBoxStyle, text]);
+
+  return <></>;
 }
+
+/**
+ * 用于某个模块的话，示例如下
+ * 核心注意是父节点需要有id;
+ * WaterMark的mountTarget为父节点的id
+ */
+
+// export function Demo() {
+//     return (
+//         <div id="demoId">
+//             <WaterMark text="This is Demo" mountTarget="demoId" config={{ fontColor: 'red' }} />
+//             <h1>Demo</h1>
+//             <article>
+//                 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+//                 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+//                 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+//                 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+//                 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+//                 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+//                 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+//                 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+//                 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+//             </article>
+//         </div>
+//     );
+// }
