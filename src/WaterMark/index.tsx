@@ -1,22 +1,37 @@
 import React, { useEffect, useRef, useCallback } from "react";
 
 interface IConfig {
+  /** 水印字体设置 */
   fontStyle: string;
+  /** 水印字体颜色设置 */
   fontColor: string;
+  /** 水印字体倾斜角度设置 */
   rotateAngle: number;
+  /** canvas第一行文字起始X坐标 */
   firstLinePositionX: number;
+  /** canvas第一行文字起始Y坐标 */
   firstLinePositionY: number;
+  /** 水印内容是以此宽度进行背景重复展示实现的 通过调整次宽度控制水印的疏密程度 */
   width: number;
+  /** 水印内容是以此高度进行背景重复展示实现的 通过调整次宽度控制水印的疏密程度*/
   height: number;
+  /** 偏移量X基数 */
+  translateX: number;
+  /** 偏移量Y基数 */
+  translateY: number;
 }
 
-type BoxStyle = Partial<IWaterMarkBoxStyle>;
+type BoxStyle = Partial<Omit<IWaterMarkBoxStyle, "position">>;
 
 interface IWaterMarkProps {
-  mountTarget?: string; // 挂在的目标:element id
-  config?: Partial<IConfig>; // 配置信息
-  text: string; // 水印文本内容
-  boxStyle?: BoxStyle; // 水印的样式
+  /** 挂在的目标:element id */
+  mountTarget?: string;
+  /** 配置信息 */
+  config?: Partial<IConfig>;
+  /** 水印文本内容 */
+  text: string;
+  /** 水印的样式 */
+  boxStyle?: BoxStyle;
   className?: string;
 }
 
@@ -37,16 +52,18 @@ interface IWaterMarkBoxStyle {
 }
 
 const defaultConfig: IConfig = {
-  fontStyle: "14px 黑体", // 水印字体设置
-  rotateAngle: -(20 * Math.PI) / 180, // 水印字体倾斜角度设置
-  fontColor: "rgba(44, 46, 59, 0.06)", // 水印字体颜色设置
-  firstLinePositionX: 0, // canvas第一行文字起始X坐标
-  firstLinePositionY: 0, // Y
-  width: 220, // 水印内容是以此宽高进行背景重复展示实现的
-  height: 100, // 水印内容是以此宽高进行背景重复展示实现的
+  fontStyle: "14px 黑体",
+  rotateAngle: -(20 * Math.PI) / 180,
+  fontColor: "rgba(44, 46, 59, 0.06)",
+  firstLinePositionX: 0,
+  firstLinePositionY: 0,
+  width: 220,
+  height: 100,
+  translateX: 110,
+  translateY: 50,
 };
 
-const defaultBoxStyle: BoxStyle = {
+const defaultBoxStyle: Partial<IWaterMarkBoxStyle> = {
   width: "100%",
   height: "100%",
   "pointer-events": "none",
@@ -76,7 +93,7 @@ export default function WaterMark({
     : WaterMarkClassName;
 
   const setBoxStyle = useCallback(() => {
-    const mergedBoxStyle: BoxStyle = {
+    const mergedBoxStyle: Partial<IWaterMarkBoxStyle> = {
       ...defaultBoxStyle,
       ...boxStyle,
       background: `url(${bgUrlRef.current}) repeat`,
@@ -145,7 +162,7 @@ export default function WaterMark({
         // 绘制水印到canvas上
         ctx.font = mergedConfig.fontStyle;
         ctx.fillStyle = mergedConfig.fontColor;
-        ctx.translate(mergedConfig.width / 2, mergedConfig.height / 2);
+        ctx.translate(mergedConfig.translateX, mergedConfig.translateY);
         ctx.rotate(mergedConfig.rotateAngle); // 水印偏转角度
         ctx.fillText(
           text,
