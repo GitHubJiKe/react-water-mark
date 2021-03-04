@@ -9,7 +9,7 @@ function App() {
       <h1>
         Water Mark In React
         <button onClick={() => setShowChildWaterMark((c) => !c)}>
-          toggle child WaterMark
+          toggle child water mark
         </button>
       </h1>
       <WaterMark

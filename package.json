@@ -4,7 +4,8 @@
   "scripts": {
     "dev": "PORT=4001 vite",
     "build": "tsc && vite build",
-    "serve": "vite preview"
+    "serve": "vite preview",
+    "deploy":"node ./deploy.js"
   },
   "dependencies": {
     "now": "^21.0.1",
