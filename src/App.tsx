@@ -1,11 +1,16 @@
 import React, { useState } from "react";
 import "./App.css";
+import GithubCorner from "./GithubCorner";
 import WaterMark from "./WaterMark";
 
 function App() {
   const [showChildWaterMark, setShowChildWaterMark] = useState(false);
   return (
     <div className="App">
+      <GithubCorner
+        href="https://github.com/GitHubJiKe/react-water-mark"
+        mode="light"
+      />
       <h1>
         Water Mark In React
         <button onClick={() => setShowChildWaterMark((c) => !c)}>
